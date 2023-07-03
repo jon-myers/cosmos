@@ -34,7 +34,11 @@ def np_to_audio_segment(np_array, sample_rate=48000, channels=2):
 def load_audio(path, sample_rate=48000):
     '''Loads an audio file into a NumPy array'''
     audio_segment = AudioSegment.from_file(path)
-    return audio_segment_to_np(audio_segment, sample_rate=sample_rate)
+    np_data = audio_segment_to_np(audio_segment, sample_rate=sample_rate)
+    if (np.max(np.abs(np_data)) > 1):
+        print(f"Max amplitude was {np.max(np.abs(np_data))}, normalizing.")
+        np_data /= np.max(np.abs(np_data))
+    return np_data
 
 class AudioTrack:
     '''A class for storing and processing audio data in a numpy array'''
@@ -48,6 +52,9 @@ class AudioTrack:
     def show_audio(self):
         '''displays an audio element that the user can playback in the 
         notebook'''
+        if (np.max(np.abs(self.data)) > 1):
+            print("Audio would have clipped, had to normalize it first.")
+            self.data /= np.max(np.abs(self.data))
         audio_segment = np_to_audio_segment(self.data, self.sample_rate)
         temp_file = io.BytesIO()
         audio_segment.export(temp_file, format="mp3")
@@ -177,6 +184,7 @@ class Pattern:
         # overhang is length of biggest sample
         overhang = max([np.shape(i)[0] for i in self.samples])
         # overhang = self.samples[:].shape()
+        # print(sum(self.durations))
         data_size = int(sample_rate * sum(self.durations) * self.cycles) + overhang
         audio = np.zeros((data_size, 2))
         start_time = 0
