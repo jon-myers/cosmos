@@ -47,6 +47,7 @@ class AudioTrack:
         self.sample_rate = sample_rate
         self.channels = channels
         size = self.sample_rate * self.duration
+        size = int(size)
         self.data = np.zeros((size, self.channels), dtype=np.float32)
     
     def show_audio(self):
@@ -55,7 +56,14 @@ class AudioTrack:
         if (np.max(np.abs(self.data)) > 1):
             print("Audio would have clipped, had to normalize it first.")
             self.data /= np.max(np.abs(self.data))
-        audio_segment = np_to_audio_segment(self.data, self.sample_rate)
+        print(self.data)
+        left = self.data[:, 0]
+        right = self.data[:, 1]
+        left = np.trim_zeros(left, 'b')
+        right = np.trim_zeros(right, 'b')
+        idx = np.max([np.shape(left)[0], np.shape(right)[0]])
+        trimmed_data = self.data[:idx, :]
+        audio_segment = np_to_audio_segment(trimmed_data, self.sample_rate)
         temp_file = io.BytesIO()
         audio_segment.export(temp_file, format="mp3")
         display(Audio(temp_file.getvalue(), rate=self.sample_rate))
@@ -70,8 +78,9 @@ class AudioTrack:
         start = int(time * self.sample_rate)
         end = start + sample.shape[0]
         if end > self.data.shape[0]:
-            text = "Sample extends beyond the duration of the AudioTrack"
-            raise ValueError(text)
+            self.data = np.pad(self.data, ((0, end - self.data.shape[0]), (0, 0)), 'constant')
+            # text = "Sample extends beyond the duration of the AudioTrack"
+            # raise ValueError(text)
         self.data[start:end] += sample * gain
 
     def clear(self):
@@ -148,6 +157,26 @@ class Meter:
         all_times += adds
         return all_times
 
+
+
+class RandomizedPattern:
+
+    def __init__(self, size, cycle_duration, samples, cycles=1, divergence=2):
+        '''divergence is the width of the durational difference; 
+        the higher the divergence, the more dissimilar the durations of 
+        successive events will be'''
+        self.size = size
+        self.cycle_duration = cycle_duration
+        self.samples = samples
+        self.durations = 2 ** np.random.uniform(-divergence/2, divergence/2, size)
+        self.sample_choices = np.random.choice(np.arange(len(samples)), size)
+        self.sample_choices = [self.samples[i] for i in self.sample_choices]
+        self.gains = np.random.uniform(0.5, 1.0, size)
+        self.pattern = Pattern(self.durations, self.gains, self.sample_choices, cycles)
+        
+
+
+
 class Pattern:
 
     def __init__(self, durations, gains, samples, cycles=1):
@@ -161,6 +190,18 @@ class Pattern:
             self.samples = np.repeat([samples], len(durations), axis=0)
         if (len(samples) == 1):
             self.samples = np.repeat(samples, len(durations), axis=0)
+
+    @staticmethod
+    def randomized(size, cycle_duration, samples, cycles=1, divergence=2):
+        '''divergence is the width of the durational difference; 
+        the higher the divergence, the more dissimilar the durations of 
+        successive events will be'''
+        durations = 2 ** np.random.uniform(-divergence/2, divergence/2, size)
+        durations *= cycle_duration / sum(durations)
+        sample_choices = np.random.choice(np.arange(len(samples)), size)
+        sample_choices = [samples[i] for i in sample_choices]
+        gains = np.random.uniform(0.5, 1.0, size)
+        return Pattern(durations, gains, sample_choices, cycles)
     
     @property
     def dur_tot(self):
