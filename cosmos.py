@@ -1,3 +1,7 @@
+# software written by Jon Myers [github.com/jon-myers ; jbmyers@ucsc.edu]
+# Free to use, modify, and distribute with attribution for non-commercial
+# purposes only.
+
 from pydub import AudioSegment
 import numpy as np
 import io
@@ -56,7 +60,6 @@ class AudioTrack:
         if (np.max(np.abs(self.data)) > 1):
             print("Audio would have clipped, had to normalize it first.")
             self.data /= np.max(np.abs(self.data))
-        print(self.data)
         left = self.data[:, 0]
         right = self.data[:, 1]
         left = np.trim_zeros(left, 'b')
@@ -134,12 +137,12 @@ class Meter:
                 container_dur = self.layer_durs[-1]
                 self.layer_durs.append(container_dur / item)
 
-    def get_time(self, pulse = [0, 0, 0]):
+    def get_time(self, pulse = [0, 0, 0], cycle = 0):
         '''returns the time of the specified pulse'''
         time = 0
         for i, item in enumerate(pulse):
             time += item * self.layer_durs[i]
-        return time
+        return time + cycle * self.cycle_duration
     
     def all_times(self, top_layer = None):
         '''returns a list of all the times in the meter'''
