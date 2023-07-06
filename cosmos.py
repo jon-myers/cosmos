@@ -177,9 +177,6 @@ class RandomizedPattern:
         self.gains = np.random.uniform(0.5, 1.0, size)
         self.pattern = Pattern(self.durations, self.gains, self.sample_choices, cycles)
         
-
-
-
 class Pattern:
 
     def __init__(self, durations, gains, samples, cycles=1):
@@ -214,14 +211,12 @@ class Pattern:
     def cycle_dur(self):
         return sum(self.durations)
 
-
     def set_cycle_duration(self, duration):
         '''sets the duration of a cycle of the pattern in seconds'''
         # self.cycles = duration / sum(self.durations)
         current_cycle_dur = sum(self.durations)
         rate = duration / current_cycle_dur
         self.durations *= rate
-
 
     def to_audio(self, sample_rate=48000):
         '''converts the pattern to a np array of audio data'''
@@ -238,11 +233,3 @@ class Pattern:
                 audio[start_time:end_time] += item * self.gains[i]
                 start_time += int(self.durations[i] * sample_rate)
         return audio
-        
-    # def add_to_track(self, track, start_time=0.0, cycles=1):
-    #     for c in range(cycles):
-    #         for i, item in enumerate(self.samples):
-    #             track.add_audio(item, start_time, self.gains[i])
-    #             start_time += self.durations[i]
-        
-# a = Pattern([1/2, 1/4, 1/2, 1/4, 1/8, 1/8], [0.3, 0.7, 0.3, 1, 0.7, 0.3], ['snare'])
