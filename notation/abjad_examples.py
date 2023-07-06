@@ -12,7 +12,7 @@ setting = """ \\header { \n tagline = "" \n}                       /
 \\paper { \n #(set-paper-size "a9landscape") \n} """
 
 lilypond_file = abjad.LilyPondFile([setting, score])
-abjad.persist.as_png(lilypond_file, "./example_1.png")
+abjad.persist.as_png(lilypond_file, "./notation/example_1.png")
 
 
 layer_1_durs = [abjad.Duration(3, 8) for i in range(4)]
@@ -38,7 +38,7 @@ setting = """ \\header { \n tagline = "" \n}                       /
 \\paper { \n #(set-paper-size "a7landscape") \n} """
 
 lilypond_file = abjad.LilyPondFile([setting, score])
-abjad.persist.as_png(lilypond_file, "./example_2.png")
+abjad.persist.as_png(lilypond_file, "./notation/example_2.png")
 
 # from Pillow import Image, ImageDraw, ImageOps
 from PIL import Image, ImageDraw, ImageOps
@@ -58,5 +58,5 @@ def clean_img(path):
 
     res.save(path)
 
-clean_img('./example_1.png')
-clean_img('./example_2.png')
+clean_img('./notation/example_1.png')
+clean_img('./notation/example_2.png')
