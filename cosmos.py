@@ -46,7 +46,7 @@ def load_audio(path, sample_rate=48000):
 
 class AudioTrack:
     '''A class for storing and processing audio data in a numpy array'''
-    def __init__(self, duration=60, sample_rate=48000, channels=2):
+    def __init__(self, duration=10, sample_rate=48000, channels=2):
         self.duration = duration
         self.sample_rate = sample_rate
         self.channels = channels
@@ -160,6 +160,19 @@ class Meter:
         all_times += adds
         return all_times
 
+class RandomWalk:
+    '''a class for generating random walks'''
+
+    def __init__(self, low=0, high=1, start=0.5, max_step=0.2):
+        self.low = low
+        self.high = high
+        self.current = start
+        self.max_step = max_step
+    
+    def step(self):
+        self.current += np.random.uniform(-self.max_step, self.max_step)
+        self.current = np.clip(self.current, self.low, self.high)
+        return self.current
 
 
 class RandomizedPattern:
