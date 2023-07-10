@@ -6,6 +6,10 @@ from pydub import AudioSegment
 import numpy as np
 import io
 from IPython.display import Audio, display
+import scipy as sp
+import matplotlib.pyplot as plt
+import librosa
+# import librosa.display
 
 def audio_segment_to_np(segment, sample_rate = 48000, normalize = True):
     '''Converts an AudioSegment to a NumPy array.  The AudioSegment must be
@@ -42,6 +46,8 @@ def load_audio(path, sample_rate=48000):
     if (np.max(np.abs(np_data)) > 1):
         print(f"Max amplitude was {np.max(np.abs(np_data))}, normalizing.")
         np_data /= np.max(np.abs(np_data))
+    if (np.shape(np_data)[1] == 1):
+        np_data = np.repeat(np_data, 2, axis=1)
     return np_data
 
 class AudioTrack:
@@ -71,13 +77,25 @@ class AudioTrack:
         audio_segment.export(temp_file, format="mp3")
         display(Audio(temp_file.getvalue(), rate=self.sample_rate))
 
-    def add_audio(self, sample, time=0.0, gain=1.0):
-        '''adds a sample to the audio track at the specified time and gain'''
+    def add_audio(self, sample, time=0.0, gain=1.0, pan=0.0):
+        '''adds a sample to the audio track at the specified time and gain
+        pan is between -1 (left) and 1 (right)
+        gain is between 0 and 1
+        '''
+        if (gain > 1.0): gain = 1.0
+        if (gain < 0.0): gain = 0.0
+        if (pan > 1.0): pan = 1.0
+        if (pan < -1.0): pan = -1.0
         if (sample.shape[1] != self.channels):
             if (sample.shape[1] == 1):
                 sample = np.repeat(sample, self.channels, axis=1)
             else:
                 sample = sample.mean(axis=1).reshape(-1, 1)
+        theta = np.pi * pan / 4
+        mult = 2 ** (1/2) / 2
+        b = (np.cos(theta) + np.sin(theta)) * mult
+        a = (np.cos(theta) - np.sin(theta)) * mult
+        sample = np.array([a * sample[:, 0], b * sample[:, 1]]).T
         start = int(time * self.sample_rate)
         end = start + sample.shape[0]
         if end > self.data.shape[0]:
@@ -85,10 +103,68 @@ class AudioTrack:
             # text = "Sample extends beyond the duration of the AudioTrack"
             # raise ValueError(text)
         self.data[start:end] += sample * gain
+        
 
     def clear(self):
         '''clears the audio track, retaining its original size and shape'''
         self.data = np.zeros(self.data.shape, dtype=np.float32)
+
+    def plot_spectrogram(self):
+        left = self.data[:, 0]
+        right = self.data[:, 1]
+        left = np.trim_zeros(left, 'b')
+        right = np.trim_zeros(right, 'b')
+        idx = np.max([np.shape(left)[0], np.shape(right)[0]])
+        trimmed_data = self.data[:idx, :]
+        plt.figure(figsize=(20, 10))
+        plt.subplot(2, 1, 1)
+        plt.title("Left Channel")
+        plt.specgram(trimmed_data[:, 0], Fs=self.sample_rate)
+        plt.subplot(2, 1, 2)
+        plt.title("Right Channel")
+        plt.specgram(trimmed_data[:, 1], Fs=self.sample_rate)
+        plt.show()
+
+    def plot_cqt_spectrogram(self):
+        left = self.data[:, 0]
+        right = self.data[:, 1]
+        left = np.trim_zeros(left, 'b')
+        right = np.trim_zeros(right, 'b')
+        idx = np.max([np.shape(left)[0], np.shape(right)[0]])
+        trimmed_data = self.data[:idx, :]
+        plt.figure(figsize=(20, 10))
+        plt.subplot(2, 1, 1)
+        plt.title("Left Channel")
+        librosa.display.specshow(librosa.amplitude_to_db(np.abs(librosa.cqt(trimmed_data[:, 0], sr=self.sample_rate)), ref=np.max), sr=self.sample_rate, x_axis='time', y_axis='cqt_note')
+        plt.subplot(2, 1, 2)
+        plt.title("Right Channel")
+        librosa.display.specshow(librosa.amplitude_to_db(np.abs(librosa.cqt(trimmed_data[:, 1], sr=self.sample_rate)), ref=np.max), sr=self.sample_rate, x_axis='time', y_axis='cqt_note')
+        plt.show()
+
+    def plot_waveform(self):
+        left = self.data[:, 0]
+        right = self.data[:, 1]
+        left = np.trim_zeros(left, 'b')
+        right = np.trim_zeros(right, 'b')
+        idx = np.max([np.shape(left)[0], np.shape(right)[0]])
+        trimmed_data = self.data[:idx, :]
+        left = trimmed_data[:, 0]
+        right = trimmed_data[:, 1]
+        time_axis = np.arange(0, len(left)) / self.sample_rate
+        # left channel above right channel
+        # clear plt first
+        plt.clf()
+        plt.figure(figsize=(20, 10))
+        plt.subplot(2, 1, 1)
+        plt.title("Left Channel")
+        plt.plot(time_axis, left)
+        # y axis between -1 and 1
+        plt.ylim(-1, 1)
+        plt.subplot(2, 1, 2)
+        plt.title("Right Channel")
+        plt.plot(time_axis, right)
+        plt.ylim(-1, 1)
+        plt.show()
 
 
     
@@ -174,29 +250,19 @@ class RandomWalk:
         self.current = np.clip(self.current, self.low, self.high)
         return self.current
 
-
-class RandomizedPattern:
-
-    def __init__(self, size, cycle_duration, samples, cycles=1, divergence=2):
-        '''divergence is the width of the durational difference; 
-        the higher the divergence, the more dissimilar the durations of 
-        successive events will be'''
-        self.size = size
-        self.cycle_duration = cycle_duration
-        self.samples = samples
-        self.durations = 2 ** np.random.uniform(-divergence/2, divergence/2, size)
-        self.sample_choices = np.random.choice(np.arange(len(samples)), size)
-        self.sample_choices = [self.samples[i] for i in self.sample_choices]
-        self.gains = np.random.uniform(0.5, 1.0, size)
-        self.pattern = Pattern(self.durations, self.gains, self.sample_choices, cycles)
-        
 class Pattern:
 
-    def __init__(self, durations, gains, samples, cycles=1):
+    def __init__(self, durations, gains, samples, cycles=1, pans=None):
         self.durations = np.array(durations)
         self.gains = gains
         self.samples = samples
         self.cycles = cycles
+        if (pans is None):
+            self.pans = np.zeros(len(durations))
+        else: 
+            self.pans = np.array(pans)
+        if (self.pans.size != self.durations.size):
+            self.pans = np.repeat(self.pans[:1], self.durations.size)
         if (len(durations) != len(gains)):
             raise ValueError("durations and gains must be the same length")
         if (type(samples) == np.ndarray):
@@ -213,8 +279,9 @@ class Pattern:
         durations *= cycle_duration / sum(durations)
         sample_choices = np.random.choice(np.arange(len(samples)), size)
         sample_choices = [samples[i] for i in sample_choices]
-        gains = np.random.uniform(0.5, 1.0, size)
-        return Pattern(durations, gains, sample_choices, cycles)
+        gains = np.random.uniform(0.25, 1.0, size)
+        pans = np.random.uniform(-1, 1, size)
+        return Pattern(durations, gains, sample_choices, cycles, pans)
     
     @property
     def dur_tot(self):
@@ -243,6 +310,76 @@ class Pattern:
         for c in range(self.cycles):
             for i, item in enumerate(self.samples):
                 end_time = start_time + np.shape(item)[0]
-                audio[start_time:end_time] += item * self.gains[i]
+                add = item * self.gains[i]
+                theta = np.pi * self.pans[i] / 4
+                mult = 2 ** (1/2) / 2
+                b = (np.cos(theta) + np.sin(theta)) * mult
+                a = (np.cos(theta) - np.sin(theta)) * mult
+                add = np.column_stack([add[:, 0] * a, add[:, 1] * b])
+                audio[start_time:end_time] += add
                 start_time += int(self.durations[i] * sample_rate)
         return audio
+    
+import scipy as sp
+
+class SineWave:
+
+    def __init__(self, frequency=440, duration=1.0, gain=1.0, pan=0.0, fade=True, sample_rate=48000):
+        self.frequency = frequency
+        self.duration = duration
+        self.gain = gain
+        self.sample_rate = sample_rate
+        self.pan = pan
+        self.fade = fade
+
+    def to_audio(self):
+        '''returns a sine wave of the specified frequency and duration'''
+        samples = int(self.duration * self.sample_rate)
+        x = np.arange(samples)
+        y = np.sin(2 * np.pi * self.frequency * x / self.sample_rate)
+        y *= self.gain
+        theta = np.pi * self.pan / 4
+        mult = 2 ** (1/2) / 2
+        a = (np.cos(theta) + np.sin(theta)) * mult
+        b = (np.cos(theta) - np.sin(theta)) * mult
+
+        out = np.array([y * b, y * a]).T
+        fade_size = int(self.sample_rate * 0.01)
+        if (self.fade):
+            fade = np.linspace(0, 1, fade_size)
+            out[:fade_size] *= fade[:, np.newaxis]
+            out[-fade_size:] *= fade[::-1, np.newaxis]
+        return out
+
+class MovingSineWave:
+
+    def __init__(self, frequencies=[220, 330, 220], durations=[1, 1], gain=1, pan=0, fade=True, sample_rate=48000):
+        self.frequencies = frequencies
+        self.durations = durations
+        self.gain = gain
+        self.pan = pan
+        self.sample_rate = sample_rate
+        self.fade = fade
+
+    def to_audio(self):
+        # sample_times = np.linspace(0, sum(self.durations), int(sum(self.durations) * self.sample_rate))
+        segments = []
+        for i in range(len(self.durations)):
+            sample_times = np.linspace(0, self.durations[i], int(self.durations[i] * self.sample_rate))
+            segments.append(sp.signal.chirp(sample_times, self.frequencies[i], sample_times[-1], self.frequencies[i+1]))
+        out = np.concatenate(segments)
+        out *= self.gain
+        theta = np.pi * self.pan / 4
+        mult = 2 ** (1/2) / 2
+        a = (np.cos(theta) + np.sin(theta)) * mult
+        b = (np.cos(theta) - np.sin(theta)) * mult
+        out = np.array([out * b, out * a]).T
+        fade_size = int(self.sample_rate * 0.01)
+        if (self.fade):
+            fade = np.linspace(0, 1, fade_size)
+            out[:fade_size] *= fade[:, np.newaxis]
+            out[-fade_size:] *= fade[::-1, np.newaxis]
+        return out
+
+# sw = SineWave(440, 1, 0.5)
+
